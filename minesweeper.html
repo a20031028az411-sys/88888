@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>極簡踩地雷</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f0f0; }
+        h1 { color: #333; }
+        #stats { margin-bottom: 10px; font-weight: bold; }
+        #board { 
+            display: grid; 
+            grid-template-columns: repeat(9, 30px); 
+            grid-template-rows: repeat(9, 30px); 
+            gap: 2px; 
+            border: 5px solid #bbb;
+            background-color: #bbb;
+        }
+        .cell {
+            width: 30px; height: 30px;
+            background-color: #ddd;
+            border: 1px solid #fff;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-weight: bold; user-select: none;
+        }
+        .cell.revealed { background-color: #eee; border: 1px solid #ccc; cursor: default; }
+        .cell.mine { background-color: #ff4d4d; }
+        .cell.flagged { background-color: #ffd700; }
+        .n1 { color: blue; } .n2 { color: green; } .n3 { color: red; } .n4 { color: darkblue; }
+        #reset-btn { margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h1>Minesweeper</h1>
+    
+    <div id="stats">
+        地雷剩餘：<span id="mine-count">10</span> | 
+        時間：<span id="timer">0</span>s
+    </div>
+
+    <div id="board"></div>
+
+    <button id="reset-btn" onclick="initGame()">重新開始</button>
+
+    <script>
+        const ROWS = 9;
+        const COLS = 9;
+        const MINES_COUNT = 10;
+        
+        let board = [];
+        let revealedCount = 0;
+        let isGameOver = false;
+        let timerInterval;
+        let seconds = 0;
+
+        function initGame() {
+            // 重置變數
+            board = [];
+            revealedCount = 0;
+            isGameOver = false;
+            seconds = 0;
+            clearInterval(timerInterval);
+            document.getElementById('timer').innerText = 0;
+            document.getElementById('mine-count').innerText = MINES_COUNT;
+            
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+
+            // 建立棋盤數據
+            for (let r = 0; r < ROWS; r++) {
+                board[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    board[r][c] = { r, c, isMine: false, revealed: false, flagged: false, neighborCount: 0 };
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.id = `cell-${r}-${c}`;
+                    cell.addEventListener('click', () => clickCell(r, c));
+                    cell.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        flagCell(r, c);
+                    });
+                    boardElement.appendChild(cell);
+                }
+            }
+
+            // 隨機佈雷
+            let placedMines = 0;
+            while (placedMines < MINES_COUNT) {
+                let r = Math.floor(Math.random() * ROWS);
+                let c = Math.floor(Math.random() * COLS);
+                if (!board[r][c].isMine) {
+                    board[r][c].isMine = true;
+                    placedMines++;
+                }
+            }
+
+            // 計算周圍雷數
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (!board[r][c].isMine) {
+                        board[r][c].neighborCount = countMinesAround(r, c);
+                    }
+                }
+            }
+
+            // 啟動計時器
+            timerInterval = setInterval(() => {
+                seconds++;
+                document.getElementById('timer').innerText = seconds;
+            }, 1000);
+        }
+
+        function countMinesAround(r, c) {
+            let count = 0;
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    let nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc].isMine) count++;
+                }
+            }
+            return count;
+        }
+
+        function clickCell(r, c) {
+            if (isGameOver || board[r][c].revealed || board[r][c].flagged) return;
+
+            const cellData = board[r][c];
+            const cellElement = document.getElementById(`cell-${r}-${c}`);
+
+            if (cellData.isMine) {
+                gameOver(false);
+                return;
+            }
+
+            revealCell(r, c);
+
+            if (revealedCount === ROWS * COLS - MINES_COUNT) {
+                gameOver(true);
+            }
+        }
+
+        function revealCell(r, c) {
+            const data = board[r][c];
+            if (data.revealed || data.flagged) return;
+
+            data.revealed = true;
+            revealedCount++;
+            const el = document.getElementById(`cell-${r}-${c}`);
+            el.classList.add('revealed');
+
+            if (data.neighborCount > 0) {
+                el.innerText = data.neighborCount;
+                el.classList.add(`n${data.neighborCount}`);
+            } else {
+                // 如果是空格，遞迴展開
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        let nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) revealCell(nr, nc);
+                    }
+                }
+            }
+        }
+
+        function flagCell(r, c) {
+            if (isGameOver || board[r][c].revealed) return;
+            board[r][c].flagged = !board[r][c].flagged;
+            const el = document.getElementById(`cell-${r}-${c}`);
+            el.classList.toggle('flagged');
+            
+            let flags = document.querySelectorAll('.flagged').length;
+            document.getElementById('mine-count').innerText = MINES_COUNT - flags;
+        }
+
+        function gameOver(won) {
+            isGameOver = true;
+            clearInterval(timerInterval);
+            
+            board.forEach(row => row.forEach(cell => {
+                if (cell.isMine) {
+                    const el = document.getElementById(`cell-${cell.r}-${cell.c}`);
+                    el.classList.add('mine');
+                    el.innerText = '💣';
+                }
+            }));
+
+            setTimeout(() => {
+                alert(won ? "恭喜贏了！" : "踩到雷了，遊戲結束！");
+            }, 100);
+        }
+
+        // 初始化
+        initGame();
+    </script>
+</body>
+</html>
